@@ -1,0 +1,98 @@
+name: Publish NuGets
+
+on:
+  workflow_call:
+    inputs:
+      projectOrSlnDir:
+        description: "Project or Solution Directory"
+        required: true
+        type: string
+      prerelease:
+        description: "Is Prerelease"
+        required: true
+        type: boolean
+        default: true
+      majorVersion:
+        description: "Major Version"
+        required: true
+        type: number
+        default: 1
+      minorVersion:
+        description: "Minor Version"
+        required: true
+        type: number
+        default: 0
+      runTests:
+        description: "Run Tests"
+        required: false
+        type: boolean
+        default: false
+      testsPath:
+        description: "Tests Path"
+        required: false
+        type: string
+        default: ""
+
+env:
+  PKG_VERSION: "${{ inputs.majorVersion }}.${{ inputs.minorVersion }}.${{ github.run_number }}"
+
+jobs:
+  build_and_publish_nugets:
+    permissions: write-all
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: bitbound/workflows/.github/actions/setup-dotnet-latest@main
+
+      - name: Restore dependencies
+        run: dotnet restore "${{ inputs.projectOrSlnDir }}"
+
+      - name: Build (Dev)
+        if: ${{ inputs.prerelease }}
+        run: dotnet build -c Release -p:FileVersion="${{ env.PKG_VERSION }}" -p:AssemblyVersion="${{ env.PKG_VERSION }}" -p:VersionPrefix="${{ env.PKG_VERSION }}" -p:VersionSuffix="dev" "${{ inputs.projectOrSlnDir }}"
+
+      - name: Build (Prod)
+        if: ${{ inputs.prerelease == false }}
+        run: dotnet build -c Release -p:FileVersion="${{ env.PKG_VERSION }}" -p:AssemblyVersion="${{ env.PKG_VERSION }}" -p:VersionPrefix="${{ env.PKG_VERSION }}" "${{ inputs.projectOrSlnDir }}"
+
+      - name: Test
+        if: ${{ inputs.runTests }}
+        run: dotnet test --no-build -c Release "${{ inputs.testsPath }}"
+
+      - name: Copy Packages
+        shell: pwsh
+        run: |
+          New-Item -Path "$env:GITHUB_WORKSPACE/packages" -ItemType Directory -Force |  Out-Null
+
+          Write-Output "Emptying target folder."
+          Get-ChildItem -Path "$env:GITHUB_WORKSPACE/packages" | ForEach-Object {
+            Write-Output "Removing file $($_.FullName)"
+            Remove-Item -Path $_.FullName -Force -Recurse
+          }
+
+          Get-ChildItem -Path $env:GITHUB_WORKSPACE -Include "*.nupkg", "*.snupkg" -Recurse | ForEach-Object {
+            Write-Output "Moving file $($_.FullName)"
+            Move-Item -Path $_.FullName -Destination "$env:GITHUB_WORKSPACE/packages/$($_.Name)"
+          }
+
+      # https://github.com/NuGet/Home/issues/12537
+      - name: Add or Update GitHub NuGet Source
+        shell: pwsh
+        run: |
+          [string]$Sources = dotnet nuget list source
+
+          if (!($Sources -imatch "\d*. nuget.org")) {
+            dotnet nuget add source --name "nuget.org" "https://api.nuget.org/v3/index.json"
+          }
+          else {
+            Write-Output "Source exists.  Updating."
+            dotnet nuget update source "nuget.org" --source "https://api.nuget.org/v3/index.json"
+          }
+
+      - name: NuGet Push
+        shell: pwsh
+        run: |
+          dotnet nuget push  "$env:GITHUB_WORKSPACE/packages/" --source "nuget.org" --api-key "${{ secrets.NUGET_API_KEY }}" --skip-duplicate
