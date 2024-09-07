@@ -5,10 +5,6 @@ on:
     secrets:
       registryApiKey:
         required: true
-      pfxBase64:
-        required: true
-      pfxPassword:
-        required: true
     inputs:
       projectOrSlnDir:
         description: "Project or Solution Directory"
@@ -94,13 +90,6 @@ jobs:
             Write-Output "Moving file $($_.FullName)"
             Move-Item -Path $_.FullName -Destination "$env:GITHUB_WORKSPACE/packages/$($_.Name)"
           }
-
-      - name: Sign NuGet Packages
-        uses: bitbound/workflows/.github/actions/sign-nugets@main
-        with:
-          nugetFolderPath: "$env:GITHUB_WORKSPACE/packages"
-          pfxBase64: ${{ secrets.pfxBase64 }}
-          pfxPassword: ${{ secrets.pfxPassword }}
 
       # https://github.com/NuGet/Home/issues/12537
       - name: Add or Update GitHub NuGet Source
