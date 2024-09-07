@@ -1,0 +1,32 @@
+name: "Sign NuGet Packages"
+description: "Signs NuGet packages using a provided certificate"
+
+inputs:
+  nugetFolderPath:
+    description: "The path to the folder containing the NuGet file(s) to sign"
+    required: true
+  pfxBase64:
+    description: "The PFX file content as a base64-encoded string"
+    required: true
+  pfxPassword:
+    description: "The PFX password"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Write PFX File
+      shell: pwsh
+      run: |
+        $PfxBytes = [System.Convert]::FromBase64String("${{ inputs.pfxBase64 }}")
+        [System.IO.File]::WriteAllBytes("${{ github.action_path }}/cert.pfx", $PfxBytes)
+
+    - name: Sign NuGets
+      shell: pwsh
+      run: |
+        dotnet nuget sign ${{ inputs.nugetFolderPath }} --certificate-path "${{ github.action_path }}/cert.pfx" --certificate-password "${{ inputs.pfxPassword }}" --timestamper http://timestamp.digicert.com
+
+    - name: Delete PFX
+      shell: pwsh
+      run: |
+        Remove-Item -Path "${{ github.action_path }}/cert.pfx" -Force
