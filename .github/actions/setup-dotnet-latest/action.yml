@@ -1,0 +1,10 @@
+name: "Setup Latest .NET"
+description: "Runs 'actions/setup-dotnet' using the latest version of .NET."
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
