@@ -2,6 +2,9 @@ name: Publish NuGets
 
 on:
   workflow_call:
+    secrets:
+      registryApiKey:
+        required: true
     inputs:
       projectOrSlnDir:
         description: "Project or Solution Directory"
@@ -22,6 +25,16 @@ on:
         required: true
         type: number
         default: 0
+      registryName:
+        description: "Registry Name"
+        required: false
+        type: string
+        default: "nuget.org"
+      registryUri:
+        description: "Registry Uri"
+        required: false
+        type: string
+        default: "https://api.nuget.org/v3/index.json"
       runTests:
         description: "Run Tests"
         required: false
@@ -84,15 +97,15 @@ jobs:
         run: |
           [string]$Sources = dotnet nuget list source
 
-          if (!($Sources -imatch "\d*. nuget.org")) {
-            dotnet nuget add source --name "nuget.org" "https://api.nuget.org/v3/index.json"
+          if (!($Sources -imatch "\d*. ${{ inputs.registryName }}")) {
+            dotnet nuget add source --name "${{ inputs.registryName }}" "${{ inputs.registryUri }}"
           }
           else {
             Write-Output "Source exists.  Updating."
-            dotnet nuget update source "nuget.org" --source "https://api.nuget.org/v3/index.json"
+            dotnet nuget update source "${{ inputs.registryName }}" --source "${{ inputs.registryUri }}"
           }
 
       - name: NuGet Push
         shell: pwsh
         run: |
-          dotnet nuget push  "$env:GITHUB_WORKSPACE/packages/" --source "nuget.org" --api-key "${{ secrets.NUGET_API_KEY }}" --skip-duplicate
+          dotnet nuget push  "$env:GITHUB_WORKSPACE/packages/" --source "${{ inputs.registryName }}" --api-key "${{ secrets.registryApiKey }}" --skip-duplicate
