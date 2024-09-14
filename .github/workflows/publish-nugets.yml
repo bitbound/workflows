@@ -73,7 +73,7 @@ jobs:
 
       - name: Test
         if: ${{ inputs.runTests }}
-        run: dotnet test --no-build -c Release "${{ inputs.testsPath }}"
+        run: dotnet test -c Release "${{ inputs.testsPath }}"
 
       - name: Copy Packages
         shell: pwsh
