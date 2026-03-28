@@ -55,7 +55,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup .NET
         uses: bitbound/workflows/.github/actions/setup-dotnet-latest@main
@@ -75,21 +75,13 @@ jobs:
         if: ${{ inputs.runTests }}
         run: dotnet test --no-build -c Release "${{ inputs.testsPath }}"
 
-      - name: Copy Packages
-        shell: pwsh
-        run: |
-          New-Item -Path "$env:GITHUB_WORKSPACE/packages" -ItemType Directory -Force |  Out-Null
+      - name: Pack (Dev)
+        if: ${{ inputs.prerelease }}
+        run: dotnet pack -c Release -p:FileVersion="${{ env.PKG_VERSION }}" -p:AssemblyVersion="${{ env.PKG_VERSION }}" -p:VersionPrefix="${{ env.PKG_VERSION }}" -p:VersionSuffix="dev" -o "$env:GITHUB_WORKSPACE/packages" "${{ inputs.projectOrSlnDir }}"
 
-          Write-Output "Emptying target folder."
-          Get-ChildItem -Path "$env:GITHUB_WORKSPACE/packages" | ForEach-Object {
-            Write-Output "Removing file $($_.FullName)"
-            Remove-Item -Path $_.FullName -Force -Recurse
-          }
-
-          Get-ChildItem -Path $env:GITHUB_WORKSPACE -Include "*.nupkg", "*.snupkg" -Recurse | ForEach-Object {
-            Write-Output "Moving file $($_.FullName)"
-            Move-Item -Path $_.FullName -Destination "$env:GITHUB_WORKSPACE/packages/$($_.Name)"
-          }
+      - name: Pack (Prod)
+        if: ${{ inputs.prerelease == false }}
+        run: dotnet pack -c Release -p:FileVersion="${{ env.PKG_VERSION }}" -p:AssemblyVersion="${{ env.PKG_VERSION }}" -p:VersionPrefix="${{ env.PKG_VERSION }}" -o "$env:GITHUB_WORKSPACE/packages" "${{ inputs.projectOrSlnDir }}"
 
       # https://github.com/NuGet/Home/issues/12537
       - name: Add or Update GitHub NuGet Source
@@ -108,4 +100,12 @@ jobs:
       - name: NuGet Push
         shell: pwsh
         run: |
+          $packages = Get-ChildItem -Path "$env:GITHUB_WORKSPACE/packages" -Include "*.nupkg", "*.snupkg" -Recurse
+
+          if ($packages.Count -eq 0) {
+            Write-Output "No packages found to push."
+            exit 0
+          }
+
+          Write-Output "Found $($packages.Count) package(s) to push."
           dotnet nuget push "$env:GITHUB_WORKSPACE/packages/" --source "${{ inputs.registryName }}" --api-key "${{ secrets.registryApiKey }}" --skip-duplicate
